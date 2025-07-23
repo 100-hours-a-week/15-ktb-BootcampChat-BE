@@ -103,8 +103,6 @@ async function setupSocketIOWithRedis() {
   }
 }
 
-setupSocketIOWithRedis();
-
 // 404 에러 핸들러
 app.use((req, res) => {
   console.log("404 Error:", req.originalUrl);
