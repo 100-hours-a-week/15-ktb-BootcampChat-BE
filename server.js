@@ -9,7 +9,7 @@ const { createClient } = require("redis");
 const { createAdapter } = require("@socket.io/redis-adapter");
 const { router: roomsRouter, initializeSocket } = require("./routes/api/rooms");
 const routes = require("./routes");
-const { redisHost, redisPort } = require("./config/keys");
+const { redisHost, redisPort, mongo_URI_AUTH,mongo_URI_FILE,mongo_URI_MSG,mongo_URI_ROOM } = require("./config/keys");
 
 const app = express();
 const server = http.createServer(app);
@@ -125,21 +125,53 @@ app.use((err, req, res, next) => {
   });
 });
 
+
+const authDB = mongoose.createConnection(mongo_URI_AUTH, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+const roomDB = mongoose.createConnection(mongo_URI_ROOM, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+const msgDB = mongoose.createConnection(mongo_URI_MSG, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+const fileDB = mongoose.createConnection(mongo_URI_FILE, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
 // 서버 시작
-// mongoose
-//     .connect(process.env.MONGO_URI)
-//     .then(async () => {
-//       console.log("MongoDB Connected");
-//       await setupSocketIOWithRedis();
-//       server.listen(PORT, "0.0.0.0", () => {
-//         console.log(`Server running on port ${PORT}`);
-//         console.log("Environment:", process.env.NODE_ENV);
-//         console.log("API Base URL:", `http://0.0.0.0:${PORT}/api`);
-//       });
-//     })
-//   .catch((err) => {
-//     console.error("Server startup error:", err);
-//     process.exit(1);
-//   });
+async function startServer() {
+  try {
+    // 여러 DB 연결
+    const authDB = await mongoose.createConnection(mongo_URI_AUTH);
+    const roomDB = await mongoose.createConnection(mongo_URI_ROOM);
+    const msgDB = await mongoose.createConnection(mongo_URI_MSG);
+    const fileDB = await mongoose.createConnection(mongo_URI_FILE);
+
+    console.log("✅ All MongoDB connections established");
+
+    // Redis + Socket 설정
+    await setupSocketIOWithRedis();
+
+    // 서버 시작
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+      console.log("Environment:", process.env.NODE_ENV);
+      console.log("API Base URL:", `http://0.0.0.0:${PORT}/api`);
+    });
+
+    // 원한다면 app.locals에 db 연결 저장
+    app.locals.dbs = { authDB, roomDB, msgDB, fileDB };
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err);
+    process.exit(1);
+  }
+}
+
+startServer();
 
 module.exports = { app, server };
