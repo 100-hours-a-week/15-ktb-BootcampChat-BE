@@ -178,3 +178,4 @@ UserSchema.index({ createdAt: 1 });
 UserSchema.index({ lastActive: 1 });
 
 module.exports = connections.auth.model('User', UserSchema);
+connections.room.model('User', UserSchema);
