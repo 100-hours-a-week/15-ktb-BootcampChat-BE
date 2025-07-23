@@ -1,6 +1,9 @@
-const mongoose = require('mongoose');
+const { Schema, SchemaTypes } = require('mongoose');
 
-const FileSchema = new mongoose.Schema({
+// 커넥션 불러오기
+const connections = require('./index');
+
+const FileSchema = new Schema({
   filename: { 
     type: String, 
     required: true,
@@ -51,7 +54,7 @@ const FileSchema = new mongoose.Schema({
     min: 0
   },
   user: { 
-    type: mongoose.Schema.Types.ObjectId, 
+    type: SchemaTypes.ObjectId, 
     ref: 'User',
     required: true,
     index: true
@@ -141,4 +144,4 @@ FileSchema.methods.isPreviewable = function() {
   return previewableTypes.includes(this.mimetype);
 };
 
-module.exports = mongoose.model('File', FileSchema);
+module.exports = connections.file.model('File', FileSchema);

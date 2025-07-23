@@ -1,6 +1,9 @@
-const mongoose = require('mongoose');
+const { Schema, Types, SchemaTypes, model } = require('mongoose');
 
-const MessageSchema = new mongoose.Schema({
+// 기능별 DB 커넥션 불러오기
+const connections = require('./index');
+
+const MessageSchema = new Schema({
   room: { 
     type: String, 
     required: [true, '채팅방 ID는 필수입니다.'],
@@ -15,7 +18,7 @@ const MessageSchema = new mongoose.Schema({
     maxlength: [10000, '메시지는 10000자를 초과할 수 없습니다.']
   },
   sender: { 
-    type: mongoose.Schema.Types.ObjectId, 
+    type: SchemaTypes.ObjectId, 
     ref: 'User',
     index: true 
   },
@@ -26,7 +29,7 @@ const MessageSchema = new mongoose.Schema({
     index: true
   },
   file: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: SchemaTypes.ObjectId,
     ref: 'File',
     required: function() {
       return this.type === 'file';
@@ -50,7 +53,7 @@ const MessageSchema = new mongoose.Schema({
   },
   readers: [{
     userId: { 
-      type: mongoose.Schema.Types.ObjectId,
+      type: SchemaTypes.ObjectId,
       ref: 'User',
       required: true
     },
@@ -63,14 +66,14 @@ const MessageSchema = new mongoose.Schema({
   reactions: {
     type: Map,
     of: [{
-      type: mongoose.Schema.Types.ObjectId,
+      type: SchemaTypes.ObjectId,
       ref: 'User'
     }],
     default: new Map()
   },
   metadata: {
     type: Map,
-    of: mongoose.Schema.Types.Mixed,
+    of: Schema.Types.Mixed,
     default: new Map()
   },
   isDeleted: {
@@ -258,5 +261,4 @@ MessageSchema.methods.toJSON = function() {
   }
 };
 
-const Message = mongoose.model('Message', MessageSchema);
-module.exports = Message;
+module.exports = connections.msg.model('Message', MessageSchema);
