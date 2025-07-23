@@ -41,7 +41,18 @@ module.exports = function(io) {
     if (!before) {
       const cached = await redisClient.get(cacheKey);
       if (cached) {
+        try {
+        // 안전한 파싱 처리
         return JSON.parse(cached);
+      } catch (err) {
+        console.error('❌ Failed to parse cached message data:', {
+          raw: cached,
+          error: err.message
+        });
+
+        // 파싱 실패 시 잘못된 캐시 삭제
+        await redisClient.del(cacheKey);
+      }
       }
     }
 
