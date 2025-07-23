@@ -126,20 +126,20 @@ app.use((err, req, res, next) => {
 });
 
 // 서버 시작
-mongoose
-    .connect(process.env.MONGO_URI)
-    .then(async () => {
-      console.log("MongoDB Connected");
-      await setupSocketIOWithRedis();
-      server.listen(PORT, "0.0.0.0", () => {
-        console.log(`Server running on port ${PORT}`);
-        console.log("Environment:", process.env.NODE_ENV);
-        console.log("API Base URL:", `http://0.0.0.0:${PORT}/api`);
-      });
-    })
-  .catch((err) => {
-    console.error("Server startup error:", err);
-    process.exit(1);
-  });
+// mongoose
+//     .connect(process.env.MONGO_URI)
+//     .then(async () => {
+//       console.log("MongoDB Connected");
+//       await setupSocketIOWithRedis();
+//       server.listen(PORT, "0.0.0.0", () => {
+//         console.log(`Server running on port ${PORT}`);
+//         console.log("Environment:", process.env.NODE_ENV);
+//         console.log("API Base URL:", `http://0.0.0.0:${PORT}/api`);
+//       });
+//     })
+//   .catch((err) => {
+//     console.error("Server startup error:", err);
+//     process.exit(1);
+//   });
 
 module.exports = { app, server };
