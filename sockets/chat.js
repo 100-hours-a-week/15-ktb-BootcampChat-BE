@@ -7,8 +7,10 @@ const { jwtSecret } = require('../config/keys');
 const redisClient = require('../utils/redisClient');
 const SessionService = require('../services/sessionService');
 const aiService = require('../services/aiService');
+const { publishReadStatus } = require('../utils/rabbitProducer');
 
 const CACHE_TTL_SECONDS = 30;
+const READ_CACHE_TTL_SECONDS = 600;
 
 module.exports = function(io) {
   const connectedUsers = new Map();
@@ -777,27 +779,36 @@ module.exports = function(io) {
           return;
         }
 
-        // 읽음 상태 업데이트
-        await Message.updateMany(
-          {
-            _id: { $in: messageIds },
-            room: roomId,
-            'readers.userId': { $ne: socket.user.id }
-          },
-          {
-            $push: {
-              readers: {
-                userId: socket.user.id,
-                readAt: new Date()
-              }
-            }
-          }
-        );
+        const cacheKey = `read:${roomId}:${socket.user.id}`;
+        const readAt = new Date();
 
+        // 1. Redis에 캐시 저장 (중복 방지용 TTL 포함)
+        await redisClient.setEx(cacheKey, READ_CACHE_TTL_SECONDS, readAt.toISOString());
+
+        // 2. Socket.io broadcast
         socket.to(roomId).emit('messagesRead', {
           userId: socket.user.id,
           messageIds
         });
+
+        // 3. RabbitMQ 비동기 영속화 요청
+        const uniqueMessageIds = [...new Set(messageIds)];
+        try {
+          await publishReadStatus({
+            roomId,
+            userId: socket.user.id,
+            messageIds: uniqueMessageIds,
+            readAt: readAt.toISOString()
+          });
+        } catch (mqError) {
+          console.error('Failed to publish read status to RabbitMQ:', {
+            error: mqError.message,
+            stack: mqError.stack,
+            userId: socket.user.id,
+            roomId,
+            messageIds: uniqueMessageIds
+          });
+        }
 
       } catch (error) {
         console.error('Mark messages as read error:', error);
