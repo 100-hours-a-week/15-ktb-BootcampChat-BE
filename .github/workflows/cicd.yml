@@ -71,7 +71,7 @@ jobs:
 
           # Docker 설치
           sudo yum update -y
-          sudo amazon-linux-extras install docker -y
+          sudo yum install docker -y
           sudo systemctl start docker
           sudo systemctl enable docker
 
