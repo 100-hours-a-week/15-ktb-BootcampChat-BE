@@ -601,6 +601,44 @@ module.exports = function(io) {
           { path: 'file', select: 'filename originalname mimetype size url storageType path' }
         ]);
 
+        // 캐시 키 구성
+        const cacheKey = `messages:${room}:latest`;
+
+        // 기존 캐시 불러오기
+        let cachedPayload;
+        try {
+          const cachedRaw = await redisClient.get(cacheKey);
+          cachedPayload = cachedRaw ? JSON.parse(cachedRaw) : null;
+        } catch (e) {
+          console.error('[Redis] 캐시 불러오기 실패:', e);
+        }
+
+        // 메시지를 JSON으로 변환
+        const plainMessage = message.toJSON();
+
+        // 캐시 업데이트
+        if (cachedPayload && Array.isArray(cachedPayload.messages)) {
+          cachedPayload.messages.push(plainMessage);
+          // 최신순 30개로 유지
+          cachedPayload.messages = cachedPayload.messages.slice(-30);
+          cachedPayload.oldestTimestamp = cachedPayload.messages[0]?.timestamp || null;
+        } else {
+          cachedPayload = {
+            messages: [plainMessage],
+            hasMore: true,
+            oldestTimestamp: plainMessage.timestamp
+          };
+        }
+
+        // 캐시 저장
+        await redisClient.setEx(
+            cacheKey,
+            CACHE_TTL_SECONDS,
+            JSON.stringify(cachedPayload)
+        );
+
+        console.log('[Redis] 캐시 갱신 완료:', cacheKey);
+
         io.to(room).emit('message', message);
 
         // AI 멘션이 있는 경우 AI 응답 생성
