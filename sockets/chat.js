@@ -50,10 +50,10 @@ module.exports = function(io) {
     });
 
     try {
-      // 쿼리 구성
+      // 쿼리 구성 - 로컬 삭제된 메시지 제외
       const query = { 
         room: roomId,
-        isDeleted: false
+        localDeletedFor: { $ne: socket.user.id }
       };
       if (before) {
         query.timestamp = { $lt: new Date(before) };
@@ -771,6 +771,8 @@ module.exports = function(io) {
           }
         }
 
+
+
         // 현재 방에서 자동 퇴장 처리
         if (roomId) {
           // 다른 디바이스로 인한 연결 종료가 아닌 경우에만 처리
@@ -928,6 +930,8 @@ module.exports = function(io) {
         });
       }
     });
+
+
   });
 
   // AI 멘션 추출 함수
