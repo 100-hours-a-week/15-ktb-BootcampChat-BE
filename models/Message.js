@@ -77,7 +77,21 @@ const MessageSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
     index: true
-  }
+  },
+  deletedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  deletedAt: {
+    type: Date
+  },
+  autoHideAt: {
+    type: Date
+  },
+  localDeletedFor: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
 }, {
   timestamps: true,
   toJSON: { 
@@ -107,7 +121,6 @@ MessageSchema.statics.markAsRead = async function(messageIds, userId) {
     updateOne: {
       filter: {
         _id: messageId,
-        isDeleted: false,
         'readers.userId': { $ne: userId }
       },
       update: {
