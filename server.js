@@ -131,7 +131,7 @@ async function startServer() {
     await mongoose.connect(mongo_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      directConnection: true,
+      // directConnection: true,
     });
     console.log("✅ MongoDB 연결 완료");
 
