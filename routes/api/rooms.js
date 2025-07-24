@@ -28,6 +28,9 @@ const initializeSocket = (socketIO) => {
   io = socketIO;
 };
 
+// 채팅방 목록 조회 (페이징 적용)
+const roomListMiddlewares = isDev ? [auth] : [limiter, auth];
+
 // 서버 상태 확인
 router.get('/health', async (req, res) => {
   try {
@@ -75,7 +78,7 @@ router.get('/health', async (req, res) => {
 });
 
 // 채팅방 목록 조회 (페이징 적용)
-router.get('/', [limiter, auth], async (req, res) => {
+router.get('/', roomListMiddlewares, async (req, res) => {
   try {
     // 쿼리 파라미터 검증 (페이지네이션)
     const page = Math.max(0, parseInt(req.query.page) || 0);
