@@ -21,10 +21,10 @@ const messageController = {
         });
       }
 
-      // 쿼리 구성
+      // 쿼리 구성 - 로컬 삭제된 메시지 제외
       const query = { 
         room: roomId,
-        isDeleted: false
+        localDeletedFor: { $ne: req.user.id }
       };
       
       if (before) {
@@ -102,22 +102,59 @@ const messageController = {
         });
       }
 
-      // 소프트 삭제 실행
-      await message.softDelete();
+      // 메시지 나이 확인 (1분 = 60000ms)
+      const messageAge = new Date() - new Date(message.timestamp);
+      const isOlderThanOneMinute = messageAge > 60000;
 
-      // Socket.IO를 통해 실시간 삭제 알림
-      const io = req.app.get('io');
-      if (io) {
-        io.to(message.room).emit('messageDeleted', {
-          messageId: message._id,
-          deletedBy: userId
+      if (isOlderThanOneMinute) {
+        // 1분이 지난 메시지: 소프트 삭제 (이 사용자에게만 안 보임)
+        message.localDeletedFor = message.localDeletedFor || [];
+        if (!message.localDeletedFor.includes(userId)) {
+          message.localDeletedFor.push(userId);
+          await message.save();
+        }
+
+        // Socket.IO를 통해 개별 사용자에게만 삭제 알림
+        const io = req.app.get('io');
+        if (io) {
+          const userSocket = [...io.sockets.sockets.values()]
+            .find(socket => socket.user?.id === userId);
+          
+          if (userSocket) {
+            userSocket.emit('messageDeleted', {
+              messageId: message._id,
+              deletedBy: userId,
+              deleteType: 'local'
+            });
+          }
+        }
+
+        res.json({
+          success: true,
+          message: '이 기기에서만 삭제되었습니다.',
+          deleteType: 'local'
+        });
+
+      } else {
+        // 1분 이내 메시지: DB에서 완전 삭제
+        await Message.findByIdAndDelete(messageId);
+
+        // Socket.IO를 통해 모든 사용자에게 삭제 알림
+        const io = req.app.get('io');
+        if (io) {
+          io.to(message.room).emit('messageDeleted', {
+            messageId: message._id,
+            deletedBy: userId,
+            deleteType: 'global'
+          });
+        }
+
+        res.json({
+          success: true,
+          message: '메시지가 삭제되었습니다.',
+          deleteType: 'global'
         });
       }
-
-      res.json({
-        success: true,
-        message: '메시지가 삭제되었습니다.'
-      });
 
     } catch (error) {
       console.error('Delete message error:', error);
