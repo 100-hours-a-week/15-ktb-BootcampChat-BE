@@ -13,6 +13,7 @@ env:
   ASG_NAME: load-ec2-asg-be
   LAUNCH_TEMPLATE_NAME: load-ec2-lt-be
   S3_BUCKET_FOR_ENV: load-s3-env
+  ASG_SECURITY_GROUP_ID: sg-06011c24bf384387e
 
 jobs:
   deploy:
@@ -57,10 +58,13 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Build and Push Docker Image
-        run: |
-          docker build -t ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }} .
-          docker push ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
-          echo "Docker image built and pushed to Docker Hub: ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}"
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
+          build-args: |
+            $(cat .env | sed '/^\s*$/d' | sed 's/^/ /')
 
       - name: Generate User Data Script
         id: generate-user-data
@@ -129,18 +133,31 @@ jobs:
             --query 'LaunchTemplateVersions[0].LaunchTemplateData' \
             --output json)
           
+          # jq 스크립트를 임시 파일로 저장합니다.
+          # 싱글 쿼트('EOF_JQ_SCRIPT')를 사용하여 스크립트 내부에 bash 변수 확장을 방지합니다.
+          cat <<'EOF_JQ_SCRIPT' > /tmp/update_lt_data.jq
+          .UserData = $USER_DATA_BASE64 |
+          del(.SecurityGroupIds) | # 최상위 SecurityGroupIds 제거
+          del(.SecurityGroups) |   # 최상위 SecurityGroups 제거 (만약 사용되었다면)
+          
+          .NetworkInterfaces = (.NetworkInterfaces // []) | # NetworkInterfaces가 없으면 빈 배열로 초기화
+          
+          # 첫 번째 네트워크 인터페이스를 업데이트하거나 생성합니다.
+          # DeviceIndex는 0으로 고정하고, Public IP 및 보안 그룹을 설정합니다.
+          .NetworkInterfaces[0] |= (
+            . // {} | # 요소가 없으면 빈 객체로 시작
+            .DeviceIndex = 0 | # 첫 번째 네트워크 인터페이스 (Eth0)
+            .AssociatePublicIpAddress = true |
+            .Groups = [$ASG_SECURITY_GROUP_ID] # 보안 그룹 ID를 배열로 설정
+          )
+          EOF_JQ_SCRIPT
+
           # user-data와 함께 NetworkInterfaces 설정을 업데이트합니다.
-          # NetworkInterfaces 배열이 없거나 비어있더라도 안전하게 첫 번째 요소를 생성/업데이트하고 Public IP를 활성화합니다.
+          # -f 옵션으로 jq 스크립트 파일을 지정하고, --arg로 변수를 전달합니다.
           UPDATED_LT_DATA=$(echo "$LT_DATA" | jq \
             --arg USER_DATA_BASE64 "${{ env.USER_DATA_BASE64 }}" \
-            '
-            .UserData = $USER_DATA_BASE64 |
-            # NetworkInterfaces가 없거나 배열이 아니면 빈 배열로 초기화
-            .NetworkInterfaces = (.NetworkInterfaces // []) |
-            # NetworkInterfaces 배열의 첫 번째 요소가 없으면 빈 객체로 생성하고, Public IP를 활성화
-            # 이미 있다면 해당 요소에 Public IP를 활성화
-            .NetworkInterfaces[0] |= (. // {} | .AssociatePublicIpAddress = true)
-            '
+            --arg ASG_SECURITY_GROUP_ID "${{ env.ASG_SECURITY_GROUP_ID }}" \
+            -f /tmp/update_lt_data.jq \
           )
 
           # 새로운 시작 템플릿 버전을 생성합니다.

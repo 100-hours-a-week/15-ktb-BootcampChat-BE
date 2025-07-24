@@ -32,6 +32,8 @@ const corsOptions = {
     "https://localhost:3002",
     "http://0.0.0.0:3000",
     "https://0.0.0.0:3000",
+    "http://43.203.103.251:3000", // 프론트엔드 도메인 추가
+    "https://chat.goorm-ktb-015.goorm.team" // 프론트엔드 도메인 추가
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
@@ -46,13 +48,13 @@ const corsOptions = {
   exposedHeaders: ["x-auth-token", "x-session-id"],
 };
 
+// OPTIONS 요청에 대한 처리
+app.options("*", cors(corsOptions));
+
 // 기본 미들웨어
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// OPTIONS 요청에 대한 처리
-app.options("*", cors(corsOptions));
 
 // 정적 파일 제공
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
