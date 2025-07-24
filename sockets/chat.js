@@ -51,7 +51,10 @@ module.exports = function(io) {
 
     try {
       // 쿼리 구성
-      const query = { room: roomId };
+      const query = { 
+        room: roomId,
+        isDeleted: false
+      };
       if (before) {
         query.timestamp = { $lt: new Date(before) };
       }
