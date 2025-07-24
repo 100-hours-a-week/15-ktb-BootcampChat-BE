@@ -62,7 +62,7 @@ module.exports = function(io) {
             .populate('sender', 'name email profileImage')
             .populate({
               path: 'file',
-              select: 'filename originalname mimetype size'
+              select: 'filename originalname mimetype size url storageType path'
             })
             .sort({ timestamp: -1 })
             .limit(limit + 1),
@@ -516,8 +516,14 @@ module.exports = function(io) {
         switch (type) {
           case 'file':
             if (!fileData || !fileData._id) {
+              console.error('Invalid file data:', fileData);
               throw new Error('파일 데이터가 올바르지 않습니다.');
             }
+
+            console.log('Looking for file:', {
+              fileId: fileData._id,
+              userId: socket.user.id
+            });
 
             const file = await File.findOne({
               _id: fileData._id,
@@ -525,8 +531,30 @@ module.exports = function(io) {
             });
 
             if (!file) {
+              console.error('File not found:', {
+                fileId: fileData._id,
+                userId: socket.user.id
+              });
+              
+              // 모든 파일 확인 (디버깅용)
+              const allFiles = await File.find({ user: socket.user.id }).limit(5);
+              console.log('User files:', allFiles.map(f => ({
+                id: f._id,
+                filename: f.filename,
+                createdAt: f.createdAt
+              })));
+              
               throw new Error('파일을 찾을 수 없거나 접근 권한이 없습니다.');
             }
+
+            console.log('File found:', {
+              id: file._id,
+              filename: file.filename,
+              originalname: file.originalname,
+              storageType: file.storageType,
+              s3Key: file.s3Key,
+              url: file.url
+            });
 
             message = new Message({
               room,
@@ -567,7 +595,7 @@ module.exports = function(io) {
         await message.save();
         await message.populate([
           { path: 'sender', select: 'name email profileImage' },
-          { path: 'file', select: 'filename originalname mimetype size' }
+          { path: 'file', select: 'filename originalname mimetype size url storageType path' }
         ]);
 
         io.to(room).emit('message', message);
