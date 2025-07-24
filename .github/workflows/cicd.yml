@@ -55,8 +55,8 @@ jobs:
             echo ".env file created from secret."
             
             # 생성된 .env 파일을 S3 버킷에 업로드합니다.
-            aws s3 cp ./.env s3://${{ env.S3_BUCKET_FOR_ENV }}/.env
-            echo ".env file uploaded to s3://${{ env.S3_BUCKET_FOR_ENV }}/.env"
+            aws s3 cp ./.env s3://${{ env.S3_BUCKET_FOR_ENV }}/.env-backend
+            echo ".env file uploaded to s3://${{ env.S3_BUCKET_FOR_ENV }}/.env-backend"
           else
             echo "Error: DOTENV_CONTENT secret is empty or not set. Skipping .env creation and upload."
             exit 1 # 비밀이 없으면 워크플로우를 실패시킬 수 있습니다.
@@ -84,7 +84,7 @@ jobs:
           # .env 파일 다운로드 및 적용
           # ASG 인스턴스의 IAM 역할에 S3_BUCKET_FOR_ENV 버킷에 대한 s3:GetObject 권한이 있어야 합니다.
           # 프라이빗 서브넷이라면 NAT Gateway 또는 S3 VPC Endpoint가 필요합니다.
-          if aws s3 cp s3://${{ env.S3_BUCKET_FOR_ENV }}/.env /tmp/.env; then
+          if aws s3 cp s3://${{ env.S3_BUCKET_FOR_ENV }}/.env-backend /tmp/.env; then
             echo ".env file downloaded successfully."
             ENV_FILE_OPTION="--env-file /tmp/.env"
           else
