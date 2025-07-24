@@ -1,0 +1,22 @@
+# 의존성 제외
+node_modules
+npm-debug.log
+
+# Git 관련
+.git
+.gitignore
+
+# 민감 및 불필요 파일
+.env
+*.pem
+*.log
+
+# 문서
+*.md
+
+# 테스트 및 설정 파일
+e2e
+__tests__
+coverage
+Dockerfile
+.dockerignore
