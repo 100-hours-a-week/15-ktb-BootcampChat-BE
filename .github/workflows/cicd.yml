@@ -70,16 +70,16 @@ jobs:
           set -eux
 
           # Docker 설치
-          yum update -y
-          amazon-linux-extras install docker -y
-          systemctl start docker
-          systemctl enable docker
+          sudo yum update -y
+          sudo amazon-linux-extras install docker -y
+          sudo systemctl start docker
+          sudo systemctl enable docker
 
           # Docker 그룹에 ec2-user 추가 (선택 사항, 디버깅 시 유용)
-          usermod -aG docker ec2-user
+          sudo usermod -aG docker ec2-user
 
           # Docker 이미지 Pull
-          docker pull ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
+          sudo docker pull ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
 
           # .env 파일 다운로드 및 적용
           # ASG 인스턴스의 IAM 역할에 S3_BUCKET_FOR_ENV 버킷에 대한 s3:GetObject 권한이 있어야 합니다.
@@ -94,14 +94,14 @@ jobs:
 
           # Docker 컨테이너 실행
           # --env-file 옵션을 사용하여 .env 파일의 환경 변수를 전달합니다.
-          docker run -d \
+          sudo docker run -d \
             -p 5001:5001 \
             --name ${{ env.DOCKER_IMAGE_NAME }} \
             \${ENV_FILE_OPTION} \
             ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
 
           # 컨테이너가 잘 실행되는지 확인 (선택 사항)
-          docker ps -a
+          sudo docker ps -a
           EOF
           # user-data.sh 파일의 내용을 base64로 인코딩하여 환경 변수로 저장
           echo "USER_DATA_BASE64=$(base64 -w 0 user-data.sh)" >> $GITHUB_ENV
