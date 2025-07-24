@@ -20,21 +20,29 @@ const PORT = process.env.PORT || 5001;
 app.set("trust proxy", 1);
 
 // CORS 설정
+const allowedOrigins = [
+  "https://bootcampchat-fe.run.goorm.site",
+  "https://bootcampchat-hgxbv.dev-k8s.arkain.io",
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
+  "https://localhost:3000",
+  "https://localhost:3001",
+  "https://localhost:3002",
+  "http://0.0.0.0:3000",
+  "https://0.0.0.0:3000",
+  "http://43.203.103.251:3000", // 프론트엔드 도메인
+  "https://chat.goorm-ktb-015.goorm.team" // 프론트엔드 도메인
+];
+
 const corsOptions = {
-  origin: [
-    "https://bootcampchat-fe.run.goorm.site",
-    "https://bootcampchat-hgxbv.dev-k8s.arkain.io",
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:3002",
-    "https://localhost:3000",
-    "https://localhost:3001",
-    "https://localhost:3002",
-    "http://0.0.0.0:3000",
-    "https://0.0.0.0:3000",
-    "http://43.203.103.251:3000", // 프론트엔드 도메인 추가
-    "https://chat.goorm-ktb-015.goorm.team" // 프론트엔드 도메인 추가
-  ],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: [
@@ -48,11 +56,14 @@ const corsOptions = {
   exposedHeaders: ["x-auth-token", "x-session-id"],
 };
 
-// OPTIONS 요청에 대한 처리
-app.options("*", cors(corsOptions));
+
 
 // 기본 미들웨어
 app.use(cors(corsOptions));
+
+// OPTIONS 요청에 대한 처리
+app.options("*", cors(corsOptions));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -133,7 +144,7 @@ async function startServer() {
     await mongoose.connect(mongo_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
-      directConnection: true,
+      // directConnection: true,
     });
     console.log("✅ MongoDB 연결 완료");
 
