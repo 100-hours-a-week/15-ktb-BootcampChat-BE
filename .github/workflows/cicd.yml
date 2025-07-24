@@ -1,0 +1,149 @@
+name: BE CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: ap-northeast-2
+  DOCKER_IMAGE_NAME: load-be
+  DOCKER_HUB_USERNAME: jchanho99
+  DOCKER_HUB_IMAGE_FULL_PATH: jchanho99/load-fe:latest
+  ASG_NAME: load-ec2-asg-be
+  LAUNCH_TEMPLATE_NAME: load-ec2-lt-be
+  S3_BUCKET_FOR_ENV: load-s3-env
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }} .
+          docker push ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
+          echo "Docker image built and pushed to Docker Hub: ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}"
+
+      - name: Create .env file from Secret and Upload to S3
+        run: |
+          if [ -n "${{ secrets.DOTENV_CONTENT }}" ]; then
+            echo "${{ secrets.DOTENV_CONTENT }}" > ./.env
+            echo ".env file created from secret."
+            
+            # 생성된 .env 파일을 S3 버킷에 업로드합니다.
+            aws s3 cp ./.env s3://${{ env.S3_BUCKET_FOR_ENV }}/.env
+            echo ".env file uploaded to s3://${{ env.S3_BUCKET_FOR_ENV }}/.env"
+          else
+            echo "Error: DOTENV_CONTENT secret is empty or not set. Skipping .env creation and upload."
+            exit 1 # 비밀이 없으면 워크플로우를 실패시킬 수 있습니다.
+          fi
+
+      - name: Generate User Data Script
+        id: generate-user-data
+        run: |
+          cat <<EOF > user-data.sh
+          #!/bin/bash
+          set -eux
+
+          # Docker 설치
+          yum update -y
+          amazon-linux-extras install docker -y
+          systemctl start docker
+          systemctl enable docker
+
+          # Docker 그룹에 ec2-user 추가 (선택 사항, 디버깅 시 유용)
+          usermod -aG docker ec2-user
+
+          # Docker 이미지 Pull
+          docker pull ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
+
+          # .env 파일 다운로드 및 적용
+          # ASG 인스턴스의 IAM 역할에 S3_BUCKET_FOR_ENV 버킷에 대한 s3:GetObject 권한이 있어야 합니다.
+          # 프라이빗 서브넷이라면 NAT Gateway 또는 S3 VPC Endpoint가 필요합니다.
+          if aws s3 cp s3://${{ env.S3_BUCKET_FOR_ENV }}/.env /tmp/.env; then
+            echo ".env file downloaded successfully."
+            ENV_FILE_OPTION="--env-file /tmp/.env"
+          else
+            echo "Warning: .env file could not be downloaded from S3. Running Docker without --env-file option."
+            ENV_FILE_OPTION=""
+          fi
+
+          # Docker 컨테이너 실행
+          # --env-file 옵션을 사용하여 .env 파일의 환경 변수를 전달합니다.
+          docker run -d \
+            -p 3000:3000 \
+            --name ${{ env.DOCKER_IMAGE_NAME }} \
+            \${ENV_FILE_OPTION} \
+            ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
+
+          # 컨테이너가 잘 실행되는지 확인 (선택 사항)
+          docker ps -a
+          EOF
+          # user-data.sh 파일의 내용을 base64로 인코딩하여 환경 변수로 저장
+          echo "USER_DATA_BASE64=$(base64 -w 0 user-data.sh)" >> $GITHUB_ENV
+
+
+      - name: Get current Launch Template version
+        id: get-lt-version
+        run: |
+          CURRENT_LT_VERSION=$(aws ec2 describe-launch-template-versions \
+            --launch-template-name ${{ env.LAUNCH_TEMPLATE_NAME }} \
+            --versions '$Latest' \
+            --query 'LaunchTemplateVersions[0].VersionNumber' \
+            --output text)
+          echo "CURRENT_LT_VERSION=$CURRENT_LT_VERSION" >> $GITHUB_ENV
+          echo "Current Launch Template Version: $CURRENT_LT_VERSION"
+
+      - name: Create new Launch Template Version with updated User Data
+        id: create-lt-version
+        run: |
+          LT_DATA=$(aws ec2 describe-launch-template-versions \
+            --launch-template-name ${{ env.LAUNCH_TEMPLATE_NAME }} \
+            --versions '$Latest' \
+            --query 'LaunchTemplateVersions[0].LaunchTemplateData' \
+            --output json)
+          
+          UPDATED_LT_DATA=$(echo "$LT_DATA" | jq --arg USER_DATA_BASE64 "${{ env.USER_DATA_BASE64 }}" '.UserData = $USER_DATA_BASE64')
+
+          NEW_LT_VERSION=$(aws ec2 create-launch-template-version \
+            --launch-template-name ${{ env.LAUNCH_TEMPLATE_NAME }} \
+            --launch-template-data "$UPDATED_LT_DATA" \
+            --query 'LaunchTemplateVersion.VersionNumber' \
+            --output text)
+          
+          echo "Created new Launch Template version: $NEW_LT_VERSION"
+          echo "NEW_LT_VERSION=$NEW_LT_VERSION" >> $GITHUB_ENV
+
+      - name: Update Auto Scaling Group
+        run: |
+          aws autoscaling update-auto-scaling-group \
+            --auto-scaling-group-name ${{ env.ASG_NAME }} \
+            --launch-template LaunchTemplateName=${{ env.LAUNCH_TEMPLATE_NAME }},Version='${{ env.NEW_LT_VERSION }}' \
+            --desired-capacity $(aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names ${{ env.ASG_NAME }} --query 'AutoScalingGroups[0].DesiredCapacity' --output text)
+          echo "Updated Auto Scaling Group ${{ env.ASG_NAME }} to use Launch Template version ${{ env.NEW_LT_VERSION }}."
+
+          aws autoscaling describe-instance-refreshes --auto-scaling-group-name ${{ env.ASG_NAME }}
