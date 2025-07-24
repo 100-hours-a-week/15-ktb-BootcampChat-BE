@@ -95,7 +95,7 @@ jobs:
           # Docker 컨테이너 실행
           # --env-file 옵션을 사용하여 .env 파일의 환경 변수를 전달합니다.
           docker run -d \
-            -p 3000:3000 \
+            -p 5001:5001 \
             --name ${{ env.DOCKER_IMAGE_NAME }} \
             \${ENV_FILE_OPTION} \
             ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
