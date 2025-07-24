@@ -107,6 +107,7 @@ jobs:
           echo "USER_DATA_BASE64=$(base64 -w 0 user-data.sh)" >> $GITHUB_ENV
 
 
+
       - name: Get current Launch Template version
         id: get-lt-version
         run: |
@@ -129,15 +130,16 @@ jobs:
             --output json)
           
           # user-data와 함께 NetworkInterfaces 설정을 업데이트합니다.
-          # 첫 번째 네트워크 인터페이스에 Public IP 할당을 활성화합니다.
-          # 만약 NetworkInterfaces가 없으면 새로 생성하고, 있으면 첫 번째 요소를 업데이트합니다.
+          # NetworkInterfaces 배열이 없거나 비어있더라도 안전하게 첫 번째 요소를 생성/업데이트하고 Public IP를 활성화합니다.
           UPDATED_LT_DATA=$(echo "$LT_DATA" | jq \
             --arg USER_DATA_BASE64 "${{ env.USER_DATA_BASE64 }}" \
             '
             .UserData = $USER_DATA_BASE64 |
-            (
-              .NetworkInterfaces[0] // {} # NetworkInterfaces[0]가 없으면 빈 객체로 초기화
-            ) |= (.AssociatePublicIpAddress = true)
+            # NetworkInterfaces가 없거나 배열이 아니면 빈 배열로 초기화
+            .NetworkInterfaces = (.NetworkInterfaces // []) |
+            # NetworkInterfaces 배열의 첫 번째 요소가 없으면 빈 객체로 생성하고, Public IP를 활성화
+            # 이미 있다면 해당 요소에 Public IP를 활성화
+            .NetworkInterfaces[0] |= (. // {} | .AssociatePublicIpAddress = true)
             '
           )
 
@@ -153,7 +155,6 @@ jobs:
 
       - name: Set new Launch Template Version as Default
         run: |
-          # 새로 생성된 시작 템플릿 버전을 기본 버전으로 설정합니다.
           aws ec2 modify-launch-template \
             --launch-template-name ${{ env.LAUNCH_TEMPLATE_NAME }} \
             --default-version ${{ env.NEW_LT_VERSION }}
@@ -168,3 +169,14 @@ jobs:
           echo "Updated Auto Scaling Group ${{ env.ASG_NAME }} to use Launch Template version ${{ env.NEW_LT_VERSION }}."
 
           aws autoscaling describe-instance-refreshes --auto-scaling-group-name ${{ env.ASG_NAME }}
+
+      # --- S3 및 CloudFront 배포 (정적 파일이 S3에 있는 경우) ---
+      - name: Sync S3 bucket
+        if: success() && env.S3_BUCKET_NAME != '' && env.S3_BUCKET_NAME != 'load-s3-good'
+        run: |
+          echo "S3 Sync step is commented out. Uncomment if needed and adjust source path."
+
+      - name: Invalidate CloudFront cache
+        if: success() && env.CLOUDFRONT_DISTRIBUTION_ID != '' && env.CLOUDFRONT_DISTRIBUTION_ID != 'foobar'
+        run: |
+          echo "CloudFront Invalidation step is commented out. Uncomment if needed."
