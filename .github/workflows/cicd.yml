@@ -118,17 +118,30 @@ jobs:
           echo "CURRENT_LT_VERSION=$CURRENT_LT_VERSION" >> $GITHUB_ENV
           echo "Current Launch Template Version: $CURRENT_LT_VERSION"
 
-      - name: Create new Launch Template Version with updated User Data
+      - name: Create new Launch Template Version with updated User Data and Public IP
         id: create-lt-version
         run: |
+          # 기존 시작 템플릿의 최신 버전 정보를 가져옵니다.
           LT_DATA=$(aws ec2 describe-launch-template-versions \
             --launch-template-name ${{ env.LAUNCH_TEMPLATE_NAME }} \
             --versions '$Latest' \
             --query 'LaunchTemplateVersions[0].LaunchTemplateData' \
             --output json)
           
-          UPDATED_LT_DATA=$(echo "$LT_DATA" | jq --arg USER_DATA_BASE64 "${{ env.USER_DATA_BASE64 }}" '.UserData = $USER_DATA_BASE64')
+          # user-data와 함께 NetworkInterfaces 설정을 업데이트합니다.
+          # 첫 번째 네트워크 인터페이스에 Public IP 할당을 활성화합니다.
+          # 만약 NetworkInterfaces가 없으면 새로 생성하고, 있으면 첫 번째 요소를 업데이트합니다.
+          UPDATED_LT_DATA=$(echo "$LT_DATA" | jq \
+            --arg USER_DATA_BASE64 "${{ env.USER_DATA_BASE64 }}" \
+            '
+            .UserData = $USER_DATA_BASE64 |
+            (
+              .NetworkInterfaces[0] // {} # NetworkInterfaces[0]가 없으면 빈 객체로 초기화
+            ) |= (.AssociatePublicIpAddress = true)
+            '
+          )
 
+          # 새로운 시작 템플릿 버전을 생성합니다.
           NEW_LT_VERSION=$(aws ec2 create-launch-template-version \
             --launch-template-name ${{ env.LAUNCH_TEMPLATE_NAME }} \
             --launch-template-data "$UPDATED_LT_DATA" \
