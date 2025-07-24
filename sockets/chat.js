@@ -40,19 +40,8 @@ module.exports = function(io) {
     // 캐시 조회
     if (!before) {
       const cached = await redisClient.get(cacheKey);
-      if (cached) {
-        try {
-        // 안전한 파싱 처리
-        return JSON.parse(cached);
-      } catch (err) {
-        console.error('❌ Failed to parse cached message data:', {
-          raw: cached,
-          error: err.message
-        });
-
-        // 파싱 실패 시 잘못된 캐시 삭제
-        await redisClient.del(cacheKey);
-      }
+      if (cached && typeof cached === 'object') {
+        return cached;
       }
     }
 
@@ -68,63 +57,64 @@ module.exports = function(io) {
       }
 
       // 메시지 로드 with profileImage
-      const messages = await Promise.race([
+      const rawMessages = await Promise.race([
         Message.find(query)
-          .populate('sender', 'name email profileImage')
-          .populate({
-            path: 'file',
-            select: 'filename originalname mimetype size'
-          })
-          .sort({ timestamp: -1 })
-          .limit(limit + 1)
-          .lean(),
+            .populate('sender', 'name email profileImage')
+            .populate({
+              path: 'file',
+              select: 'filename originalname mimetype size'
+            })
+            .sort({ timestamp: -1 })
+            .limit(limit + 1),
         timeoutPromise
       ]);
 
-      // 결과 처리
-      const hasMore = messages.length > limit;
-      const resultMessages = messages.slice(0, limit);
-      const sortedMessages = resultMessages.sort((a, b) => 
-        new Date(a.timestamp) - new Date(b.timestamp)
-      );
+      const hasMore = rawMessages.length > limit;
 
-      if (!before && sortedMessages.length > 0) {
+      const resultMessages = rawMessages
+          .slice(0, limit)
+          .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+      // JSON.stringify 가능한 평문 객체로 변환
+      const plainMessages = resultMessages.map(msg => msg.toJSON());
+
+      if (!before && plainMessages.length > 0) {
         await redisClient.setEx(
             cacheKey,
             CACHE_TTL_SECONDS,
             JSON.stringify({
-              messages: sortedMessages,
+              messages: plainMessages,
               hasMore,
-              oldestTimestamp: sortedMessages[0]?.timestamp || null
-            }) // 문자열로 변환
+              oldestTimestamp: plainMessages[0]?.timestamp || null
+            })
         );
       }
 
       // 읽음 상태 비동기 업데이트
-      if (sortedMessages.length > 0 && socket.user) {
-        const messageIds = sortedMessages.map(msg => msg._id);
+      if (plainMessages.length > 0 && socket.user) {
+        const messageIds = plainMessages.map(msg => msg._id);
         Message.updateMany(
-          {
-            _id: { $in: messageIds },
-            'readers.userId': { $ne: socket.user.id }
-          },
-          {
-            $push: {
-              readers: {
-                userId: socket.user.id,
-                readAt: new Date()
+            {
+              _id: { $in: messageIds },
+              'readers.userId': { $ne: socket.user.id }
+            },
+            {
+              $push: {
+                readers: {
+                  userId: socket.user.id,
+                  readAt: new Date()
+                }
               }
             }
-          }
         ).exec().catch(error => {
           console.error('Read status update error:', error);
         });
       }
 
       return {
-        messages: sortedMessages,
+        messages: plainMessages,
         hasMore,
-        oldestTimestamp: sortedMessages[0]?.timestamp || null
+        oldestTimestamp: plainMessages[0]?.timestamp || null
       };
     } catch (error) {
       if (error.message === 'Message loading timed out') {

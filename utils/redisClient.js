@@ -22,17 +22,24 @@ class MockRedisClient {
   async get(key) {
     const item = this.store.get(key);
     if (!item) return null;
-    
+
     if (item.expires && Date.now() > item.expires) {
       this.store.delete(key);
       return null;
     }
-    
-    try {
-      return JSON.parse(item.value);
-    } catch {
-      return item.value;
+
+    const value = item.value;
+
+    // string일 때만 parse
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
     }
+
+    return value; // 이미 객체라면 그대로 반환
   }
 
   async setEx(key, seconds, value) {
