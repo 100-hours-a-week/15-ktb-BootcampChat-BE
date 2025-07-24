@@ -33,6 +33,7 @@ const corsOptions = {
     "http://0.0.0.0:3000",
     "https://0.0.0.0:3000",
     "http://43.203.103.251:3000/", // 프론트엔드 도메인 추가
+    "https://chat.goorm-ktb-015.goorm.team"
   ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
