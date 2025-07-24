@@ -64,7 +64,18 @@ jobs:
           push: true
           tags: ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
           build-args: |
-            $(cat .env | sed '/^\s*$/d' | sed 's/^/ /')
+            MONGO_URI=${{ secrets.MONGO_URI }}
+            AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            AWS_REGION=${{ secrets.AWS_REGION }}
+            AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            REDIS_HOST=${{ secrets.REDIS_HOST }}
+            REDIS_PORT=${{ secrets.REDIS_PORT }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+            ENCRYPTION_KEY=${{ secrets.ENCRYPTION_KEY }}
+            PASSWORD_SALT=${{ secrets.PASSWORD_SALT }}
+            RABBITMQ_URL=${{ secrets.RABBITMQ_URL }}
 
       - name: Generate User Data Script
         id: generate-user-data
@@ -134,7 +145,6 @@ jobs:
             --output json)
           
           # jq 스크립트를 임시 파일로 저장합니다.
-          # 싱글 쿼트('EOF_JQ_SCRIPT')를 사용하여 스크립트 내부에 bash 변수 확장을 방지합니다.
           cat <<'EOF_JQ_SCRIPT' > /tmp/update_lt_data.jq
           .UserData = $USER_DATA_BASE64 |
           del(.SecurityGroupIds) | # 최상위 SecurityGroupIds 제거
@@ -146,7 +156,7 @@ jobs:
           # DeviceIndex는 0으로 고정하고, Public IP 및 보안 그룹을 설정합니다.
           .NetworkInterfaces[0] |= (
             . // {} | # 요소가 없으면 빈 객체로 시작
-            .DeviceIndex = 0 | # 첫 번째 네트워크 인터페이스 (Eth0)
+            .DeviceIndex = 0 | # 첫 번째 네트워크 인터페이스 (Eth0) - 필수!
             .AssociatePublicIpAddress = true |
             .Groups = [$ASG_SECURITY_GROUP_ID] # 보안 그룹 ID를 배열로 설정
           )
