@@ -1,35 +1,18 @@
 const File = require('../models/File');
 const Message = require('../models/Message');
 const Room = require('../models/Room');
-const { processFileForRAG } = require('../services/fileService');
-const path = require('path');
-const fs = require('fs');
-const { promisify } = require('util');
-const crypto = require('crypto');
-const { uploadDir } = require('../middleware/upload');
+const AWS = require('aws-sdk'); // AWS SDK 추가
 
-const fsPromises = {
-  writeFile: promisify(fs.writeFile),
-  unlink: promisify(fs.unlink),
-  access: promisify(fs.access),
-  mkdir: promisify(fs.mkdir),
-  rename: promisify(fs.rename)
-};
+// AWS S3 설정
+const s3 = new AWS.S3({
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  region: process.env.AWS_REGION
+});
 
-const isPathSafe = (filepath, directory) => {
-  const resolvedPath = path.resolve(filepath);
-  const resolvedDirectory = path.resolve(directory);
-  return resolvedPath.startsWith(resolvedDirectory);
-};
+const S3_BUCKET_NAME = process.env.AWS_S3_BUCKET_NAME;
 
-const generateSafeFilename = (originalFilename) => {
-  const ext = path.extname(originalFilename || '').toLowerCase();
-  const timestamp = Date.now();
-  const randomBytes = crypto.randomBytes(8).toString('hex');
-  return `${timestamp}_${randomBytes}${ext}`;
-};
-
-// 개선된 파일 정보 조회 함수
+// 개선된 파일 정보 조회 함수 (S3 URL 반환)
 const getFileFromRequest = async (req) => {
   try {
     const filename = req.params.filename;
@@ -43,13 +26,6 @@ const getFileFromRequest = async (req) => {
     if (!token || !sessionId) {
       throw new Error('Authentication required');
     }
-
-    const filePath = path.join(uploadDir, filename);
-    if (!isPathSafe(filePath, uploadDir)) {
-      throw new Error('Invalid file path');
-    }
-
-    await fsPromises.access(filePath, fs.constants.R_OK);
 
     const file = await File.findOne({ filename: filename });
     if (!file) {
@@ -72,7 +48,7 @@ const getFileFromRequest = async (req) => {
       throw new Error('Unauthorized access');
     }
 
-    return { file, filePath };
+    return { file, url: file.path }; // S3 URL 반환
   } catch (error) {
     console.error('getFileFromRequest error:', {
       filename: req.params.filename,
@@ -82,6 +58,55 @@ const getFileFromRequest = async (req) => {
   }
 };
 
+// S3 업로드 후 파일 메타데이터 등록
+exports.registerFile = async (req, res) => {
+  try {
+    const { url, filename, size, type } = req.body;
+
+    if (!url || !filename || !size || !type) {
+      return res.status(400).json({
+        success: false,
+        message: '필수 파일 메타데이터가 누락되었습니다.'
+      });
+    }
+
+    const file = new File({
+      filename: filename, // S3에 저장된 파일명 (key)
+      originalname: filename, // 원본 파일명
+      mimetype: type,
+      size: size,
+      user: req.user.id,
+      path: url // S3 URL을 path 필드에 저장
+    });
+
+    await file.save();
+
+    res.status(200).json({
+      success: true,
+      message: '파일 메타데이터 등록 성공',
+      file: {
+        _id: file._id,
+        filename: file.filename,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
+        uploadDate: file.uploadDate,
+        url: file.path // S3 URL 반환
+      }
+    });
+
+  } catch (error) {
+    console.error('File registration error:', error);
+    res.status(500).json({
+      success: false,
+      message: '파일 메타데이터 등록 중 오류가 발생했습니다.',
+      error: error.message
+    });
+  }
+};
+
+// 기존 파일 업로드 (더 이상 사용되지 않음)
+/*
 exports.uploadFile = async (req, res) => {
   try {
     if (!req.file) {
@@ -136,33 +161,21 @@ exports.uploadFile = async (req, res) => {
     });
   }
 };
+*/
 
 exports.downloadFile = async (req, res) => {
   try {
-    const { file, filePath } = await getFileFromRequest(req);
-    const contentDisposition = file.getContentDisposition('attachment');
+    const { file, url } = await getFileFromRequest(req);
 
-    res.set({
-      'Content-Type': file.mimetype,
-      'Content-Length': file.size,
-      'Content-Disposition': contentDisposition,
-      'Cache-Control': 'private, no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
+    // S3 URL을 클라이언트에 반환
+    res.status(200).json({
+      success: true,
+      message: '파일 다운로드 URL 제공',
+      url: url,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
     });
-
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.on('error', (error) => {
-      console.error('File streaming error:', error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          message: '파일 스트리밍 중 오류가 발생했습니다.'
-        });
-      }
-    });
-
-    fileStream.pipe(res);
 
   } catch (error) {
     handleFileError(error, res);
@@ -171,7 +184,7 @@ exports.downloadFile = async (req, res) => {
 
 exports.viewFile = async (req, res) => {
   try {
-    const { file, filePath } = await getFileFromRequest(req);
+    const { file, url } = await getFileFromRequest(req);
 
     if (!file.isPreviewable()) {
       return res.status(415).json({
@@ -180,46 +193,34 @@ exports.viewFile = async (req, res) => {
       });
     }
 
-    const contentDisposition = file.getContentDisposition('inline');
-        
-    res.set({
-      'Content-Type': file.mimetype,
-      'Content-Disposition': contentDisposition,
-      'Content-Length': file.size,
-      'Cache-Control': 'public, max-age=31536000, immutable'
+    // S3 URL을 클라이언트에 반환
+    res.status(200).json({
+      success: true,
+      message: '파일 미리보기 URL 제공',
+      url: url,
+      filename: file.originalname,
+      mimetype: file.mimetype,
+      size: file.size
     });
-
-    const fileStream = fs.createReadStream(filePath);
-    fileStream.on('error', (error) => {
-      console.error('File streaming error:', error);
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          message: '파일 스트리밍 중 오류가 발생했습니다.'
-        });
-      }
-    });
-
-    fileStream.pipe(res);
 
   } catch (error) {
     handleFileError(error, res);
   }
 };
 
-const handleFileStream = (fileStream, res) => {
-  fileStream.on('error', (error) => {
-    console.error('File streaming error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        success: false,
-        message: '파일 스트리밍 중 오류가 발생했습니다.'
-      });
-    }
-  });
+// const handleFileStream = (fileStream, res) => { // 더 이상 사용되지 않음
+//   fileStream.on('error', (error) => {
+//     console.error('File streaming error:', error);
+//     if (!res.headersSent) {
+//       res.status(500).json({
+//         success: false,
+//         message: '파일 스트리밍 중 오류가 발생했습니다.'
+//       });
+//     }
+//   });
 
-  fileStream.pipe(res);
-};
+//   fileStream.pipe(res);
+// };
 
 const handleFileError = (error, res) => {
   console.error('File operation error:', {
@@ -231,11 +232,11 @@ const handleFileError = (error, res) => {
   const errorResponses = {
     'Invalid filename': { status: 400, message: '잘못된 파일명입니다.' },
     'Authentication required': { status: 401, message: '인증이 필요합니다.' },
-    'Invalid file path': { status: 400, message: '잘못된 파일 경로입니다.' },
+    // 'Invalid file path': { status: 400, message: '잘못된 파일 경로입니다.' }, // 로컬 파일 경로 검증 불필요
     'File not found in database': { status: 404, message: '파일을 찾을 수 없습니다.' },
     'File message not found': { status: 404, message: '파일 메시지를 찾을 수 없습니다.' },
     'Unauthorized access': { status: 403, message: '파일에 접근할 권한이 없습니다.' },
-    'ENOENT': { status: 404, message: '파일을 찾을 수 없습니다.' }
+    // 'ENOENT': { status: 404, message: '파일을 찾을 수 없습니다.' } // 로컬 파일 시스템 에러 불필요
   };
 
   const errorResponse = errorResponses[error.message] || {
