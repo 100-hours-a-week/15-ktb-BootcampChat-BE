@@ -33,6 +33,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Create .env file from Secret and Upload to S3
+        run: |
+          if [ -n "${{ secrets.DOTENV_CONTENT }}" ]; then
+            echo "${{ secrets.DOTENV_CONTENT }}" > ./.env
+            echo ".env file created from secret."
+            
+            # 생성된 .env 파일을 S3 버킷에 업로드합니다.
+            aws s3 cp ./.env s3://${{ env.S3_BUCKET_FOR_ENV }}/.env-backend
+            echo ".env file uploaded to s3://${{ env.S3_BUCKET_FOR_ENV }}/.env-backend"
+          else
+            echo "Error: DOTENV_CONTENT secret is empty or not set. Skipping .env creation and upload."
+            exit 1 # 비밀이 없으면 워크플로우를 실패시킬 수 있습니다.
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -47,20 +61,6 @@ jobs:
           docker build -t ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }} .
           docker push ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}
           echo "Docker image built and pushed to Docker Hub: ${{ env.DOCKER_HUB_IMAGE_FULL_PATH }}"
-
-      - name: Create .env file from Secret and Upload to S3
-        run: |
-          if [ -n "${{ secrets.DOTENV_CONTENT }}" ]; then
-            echo "${{ secrets.DOTENV_CONTENT }}" > ./.env
-            echo ".env file created from secret."
-            
-            # 생성된 .env 파일을 S3 버킷에 업로드합니다.
-            aws s3 cp ./.env s3://${{ env.S3_BUCKET_FOR_ENV }}/.env-backend
-            echo ".env file uploaded to s3://${{ env.S3_BUCKET_FOR_ENV }}/.env-backend"
-          else
-            echo "Error: DOTENV_CONTENT secret is empty or not set. Skipping .env creation and upload."
-            exit 1 # 비밀이 없으면 워크플로우를 실패시킬 수 있습니다.
-          fi
 
       - name: Generate User Data Script
         id: generate-user-data
