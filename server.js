@@ -126,10 +126,11 @@ app.use((err, req, res, next) => {
 // 서버 시작
 async function startServer() {
   try {
-    // ✅ 변경됨: 하나의 DB만 연결
+    // DB 연결
     await mongoose.connect(mongo_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      directConnection: true,
     });
     console.log("✅ MongoDB 연결 완료");
 
