@@ -1,12 +1,9 @@
-const { Schema } = require('mongoose');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { encryptionKey, passwordSalt } = require('../config/keys');
 const crypto = require('crypto');
 
-// 기능별 DB 커넥션 불러오기
-const connections = require('./index');
-
-const UserSchema = new Schema({
+const UserSchema = new mongoose.Schema({
   name: {
     type: String,
     required: [true, '이름은 필수 입력 항목입니다.'],
@@ -177,8 +174,4 @@ UserSchema.index({ encryptedEmail: 1 }, { unique: true, sparse: true });
 UserSchema.index({ createdAt: 1 });
 UserSchema.index({ lastActive: 1 });
 
-module.exports = connections.auth.model('User', UserSchema);
-
-connections.room.model('User', UserSchema);
-connections.msg.model('User', UserSchema);
-connections.file.model('User', UserSchema);
+module.exports = mongoose.model('User', UserSchema);

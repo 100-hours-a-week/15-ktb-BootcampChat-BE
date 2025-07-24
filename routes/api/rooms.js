@@ -6,10 +6,12 @@ const User = require('../../models/User');
 const { rateLimit } = require('express-rate-limit');
 let io;
 
+const isDev = process.env.NODE_ENV === 'development';
+
 // 속도 제한 설정
 const limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1분
-  max: 60, // IP당 최대 요청 수
+  max: isDev ? 120 : 60, // IP당 최대 요청 수
   message: {
     success: false,
     error: {

@@ -1,17 +1,14 @@
-const { Schema, SchemaTypes } = require('mongoose');
+const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-// 커넥션 불러오기 
-const connections = require('./index');
-
-const RoomSchema = new Schema({
+const RoomSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
     trim: true
   },
   creator: {
-    type: SchemaTypes.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
   },
@@ -28,7 +25,7 @@ const RoomSchema = new Schema({
     default: Date.now
   },
   participants: [{
-    type: SchemaTypes.ObjectId,
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   }]
 });
@@ -53,4 +50,4 @@ RoomSchema.methods.checkPassword = async function(password) {
   return await bcrypt.compare(password, room.password);
 };
 
-module.exports = connections.room.model('Room', RoomSchema);
+module.exports = mongoose.model('Room', RoomSchema);
