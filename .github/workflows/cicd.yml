@@ -138,6 +138,14 @@ jobs:
           echo "Created new Launch Template version: $NEW_LT_VERSION"
           echo "NEW_LT_VERSION=$NEW_LT_VERSION" >> $GITHUB_ENV
 
+      - name: Set new Launch Template Version as Default
+        run: |
+          # 새로 생성된 시작 템플릿 버전을 기본 버전으로 설정합니다.
+          aws ec2 modify-launch-template \
+            --launch-template-name ${{ env.LAUNCH_TEMPLATE_NAME }} \
+            --default-version ${{ env.NEW_LT_VERSION }}
+          echo "Set Launch Template ${{ env.LAUNCH_TEMPLATE_NAME }} default version to ${{ env.NEW_LT_VERSION }}."
+
       - name: Update Auto Scaling Group
         run: |
           aws autoscaling update-auto-scaling-group \
