@@ -107,7 +107,7 @@ exports.saveFileMetadata = async (req, res) => {
 
     // 파일 메타데이터 저장 (S3 URL만 저장)
     const file = new File({
-      filename: originalname, // 원본 파일명 사용
+      filename: s3Key, // S3 key를 filename으로 사용
       originalname: originalname,
       mimetype: mimetype,
       size: size,

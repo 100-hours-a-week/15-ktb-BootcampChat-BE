@@ -136,7 +136,8 @@ const FileSchema = new mongoose.Schema({
 });
 
 // 복합 인덱스
-FileSchema.index({ filename: 1, user: 1 });
+// FileSchema.index({ filename: 1, user: 1 }); // Deprecated for S3
+FileSchema.index({ s3Key: 1 }, { unique: true, sparse: true });
 FileSchema.index({ s3Key: 1, user: 1 });
 FileSchema.index({ storageType: 1, uploadDate: -1 });
 FileSchema.index({ user: 1, status: 1, uploadDate: -1 });
