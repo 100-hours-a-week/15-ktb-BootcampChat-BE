@@ -21,16 +21,13 @@ async function startConsumer() {
         if (msg !== null) {
             try {
                 const payload = JSON.parse(msg.content.toString());
-                const { roomId, userId, messageIds, readAt } = payload;
 
-                // 유효성 검사
-                if (
-                    !roomId ||
-                    !userId ||
-                    !Array.isArray(messageIds) ||
-                    messageIds.length === 0
-                ) {
-                    console.warn('[Worker] Invalid message payload. Skipping:', payload);
+                // [10] 메시지 수신 로그
+                console.log(`[Worker] 메시지 수신 - roomId=${payload.roomId}, userId=${payload.userId}, messageCount=${payload.messageIds.length}`);
+
+                // [11] 유효성 검증 실패 시
+                if (!payload.roomId || !payload.userId || !Array.isArray(payload.messageIds)) {
+                    console.warn(`[Worker] 유효하지 않은 메시지 payload:`, payload);
                     return channel.ack(msg);
                 }
 
@@ -53,9 +50,13 @@ async function startConsumer() {
                     );
                 }
 
+                // [12] 읽음 처리 성공
+                console.log(`[Worker] 읽음 처리 완료 - userId=${payload.userId}, updatedMessages=${payload.messageIds.length}`);
+
                 channel.ack(msg);
             } catch (err) {
-                console.error('[Worker] MongoDB update error:', err);
+                // [13] 예외 처리
+                console.error('[Worker] 읽음 처리 중 오류 발생:', err);
                 channel.nack(msg);
             }
         }

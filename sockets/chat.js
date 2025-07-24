@@ -797,6 +797,14 @@ module.exports = function(io) {
 
         // 3. RabbitMQ 비동기 영속화 요청
         const uniqueMessageIds = [...new Set(messageIds)];
+
+        // [14] publishReadStatus 호출 직전
+        console.debug('[Socket.IO] 읽음 상태 MQ 발행 준비 - roomId=%s, userId=%s, messageCount=%d',
+            roomId,
+            socket.user.id,
+            uniqueMessageIds.length
+        );
+
         try {
           await publishReadStatus({
             roomId,
@@ -805,7 +813,7 @@ module.exports = function(io) {
             readAt: readAt.toISOString()
           });
         } catch (mqError) {
-          console.error('Failed to publish read status to RabbitMQ:', {
+          console.error('[Socket.IO] Failed to publish read status to RabbitMQ:', {
             error: mqError.message,
             stack: mqError.stack,
             userId: socket.user.id,

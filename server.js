@@ -10,6 +10,7 @@ const { createAdapter } = require("@socket.io/redis-adapter");
 const { router: roomsRouter, initializeSocket } = require("./routes/api/rooms");
 const routes = require("./routes");
 const { redisHost, redisPort, mongo_URI } = require("./config/keys");
+const { initRabbitMQConnection } = require("./utils/rabbitProducer");
 
 const app = express();
 const server = http.createServer(app);
@@ -136,6 +137,9 @@ async function startServer() {
 
     // Redis + Socket 설정
     await setupSocketIOWithRedis();
+
+    // RabbitMQ 연결 시도
+    await initRabbitMQConnection();
 
     // 서버 시작
     server.listen(PORT, "0.0.0.0", () => {
