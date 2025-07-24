@@ -9,7 +9,7 @@ env:
   AWS_REGION: ap-northeast-2
   DOCKER_IMAGE_NAME: load-be
   DOCKER_HUB_USERNAME: jchanho99
-  DOCKER_HUB_IMAGE_FULL_PATH: jchanho99/load-fe:latest
+  DOCKER_HUB_IMAGE_FULL_PATH: jchanho99/load-be:latest
   ASG_NAME: load-ec2-asg-be
   LAUNCH_TEMPLATE_NAME: load-ec2-lt-be
   S3_BUCKET_FOR_ENV: load-s3-env
