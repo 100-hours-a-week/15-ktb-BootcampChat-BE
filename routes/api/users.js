@@ -32,7 +32,6 @@ router.put('/profile-password',
 // 프로필 이미지 업로드
 router.post('/profile-image',
   auth,
-  upload.single('profileImage'),
   userController.uploadProfileImage
 );
 
